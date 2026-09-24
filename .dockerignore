@@ -1,0 +1,7 @@
+# The sandbox image only needs the dependency lock and sandbox/: the source code and the project
+# output are mounted at run time (see src/tutorial_ai/sandbox.py).
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!sandbox/

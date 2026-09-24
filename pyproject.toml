@@ -1,0 +1,42 @@
+[project]
+name = "tutorial-ai"
+version = "0.1.0"
+description = "Turn a GitHub repository into a YouTube-style programming tutorial video."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "google-genai>=2.24.0",
+    "httpx>=0.28.1",
+    "openai>=3.19.0",
+    "playwright>=1.63.0",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyobjc-framework-applicationservices>=12.2.2 ; sys_platform == 'darwin'",
+    "pyobjc-framework-cocoa>=12.2.2 ; sys_platform == 'darwin'",
+    "pyobjc-framework-quartz>=12.2.2 ; sys_platform == 'darwin'",
+    "typer>=0.27.2",
+    "uvicorn>=0.53.0",
+]
+
+[project.scripts]
+tutorial-ai = "tutorial_ai.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.uv]
+# cryptography >=49 ships no x86_64 macOS wheels (Intel Macs would build from Rust source).
+constraint-dependencies = [
+    "cryptography<49; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

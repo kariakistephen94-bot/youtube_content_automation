@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "/Users/kariakistephen/.local/bin/uv",
+      "runtimeArgs": ["run", "tutorial-ai", "serve"],
+      "port": 8765
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "/Users/kariakistephen/.nvm/versions/node/v24.21.0/bin/npm",
+      "runtimeArgs": ["--prefix", "web", "run", "dev"],
+      "port": 3100
+    }
+  ]
+}
