@@ -1,8 +1,8 @@
 """TerminalController: run commands visibly in VS Code's terminal, and verify them for real.
 
-What the viewer sees is typed into the integrated terminal. Success is not judged from the
-screen: for commands that need checking, the same command is also run as a normal subprocess and
-its actual output and exit code are captured.
+Commands are typed once into the integrated shell. Its prompt hook reports their exit status;
+process disappearance is never treated as proof of success. The explicit verify helper is
+reserved for independent smoke-test checks.
 """
 
 import subprocess
@@ -75,16 +75,22 @@ class CommandResult(BaseModel):
 class TerminalController:
     def __init__(self, vscode: VSCodeController) -> None:
         self.vscode = vscode
+        self._command = ""
 
-    def run_command(self, command: str, wait_seconds: float = 2.0) -> None:
+    def run_command(self, command: str, wait_seconds: float = 2.0, *, focus: bool = True) -> None:
         """Validate, then type the command in the integrated terminal and press Enter."""
         check = validate_command(command)
         if not check.allowed:
             raise AutomationError(f"Refusing to run {command!r}: {check.reason}")
-        self.vscode.open_terminal()
+        if focus:
+            self.vscode.open_terminal()
+        if not self.wait_until_idle(15):
+            raise AutomationError("The terminal is busy or its shell integration is not ready; recording stopped.")
+        self._command = command
         log.info("Running in terminal: %s", command)
         self.vscode.type_text(command, "terminal")
         time.sleep(0.4)
+        self.vscode.terminal_status_path.unlink(missing_ok=True)
         self.vscode.keyboard.press("return")
         time.sleep(wait_seconds)
 
@@ -95,26 +101,29 @@ class TerminalController:
             return []
         return running_in_terminal(process_tree(), pid)
 
+    def exit_code(self) -> int | None:
+        """Exit status reported by the actual integrated shell, never a second execution."""
+        try:
+            return int(self.vscode.terminal_status_path.read_text().strip())
+        except (FileNotFoundError, ValueError):
+            return None
+
+    def require_success(self) -> None:
+        code = self.exit_code()
+        if code is None:
+            raise AutomationError("The terminal did not report an exit status; recording stopped.")
+        if code != 0:
+            hint = " A required command was not found; prepare the environment first." if code == 127 else ""
+            raise AutomationError(f"Command {self._command!r} failed with exit code {code}.{hint}")
+
     def wait_until_idle(self, timeout: float, settle: float = 0.75) -> bool:
-        """Wait until the terminal's shell has finished the command it is running (no child
-        process for `settle` seconds). The viewer sees nothing extra: the check reads the process
-        tree, not the screen. Returns False if the command is still running after `timeout`."""
+        """Wait for the shell's completion report, including fast failures and builtins."""
         deadline = time.monotonic() + timeout
-        idle_since: float | None = None
-        last: list[str] = []
         while time.monotonic() < deadline:
-            running = self.running_commands()
-            if running:
-                idle_since = None
-                if running != last:
-                    log.info("Terminal is running %s - waiting for it to finish", ", ".join(running))
-                    last = running
-            else:
-                idle_since = idle_since or time.monotonic()
-                if time.monotonic() - idle_since >= settle:
-                    return True
-            time.sleep(0.25)
-        return not self.running_commands()
+            if self.exit_code() is not None:
+                return True
+            time.sleep(0.1)
+        return self.exit_code() is not None
 
     def verify(
         self, command: str, cwd: Path, expect_output: str | None = None, timeout: float = 60

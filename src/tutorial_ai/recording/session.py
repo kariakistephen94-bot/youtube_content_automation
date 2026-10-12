@@ -78,6 +78,13 @@ class RecordingSession:
         all_ids = [s.id for s in self.scenes.scenes]
         start_index = all_ids.index(from_scene) if from_scene else 0
         wanted = scene_ids or all_ids[start_index:]
+        from tutorial_ai.automation.prerequisites import check_prerequisites
+
+        self._progress("Checking recording prerequisites")
+        check_prerequisites([
+            action.parameters.command for scene in self.scenes.scenes
+            for action in scene.actions if action.type is ActionType.RUN_COMMAND
+        ])
         self._check_ports(wanted)
 
         self._prepare_workspace()

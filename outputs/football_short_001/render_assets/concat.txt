@@ -1,0 +1,8 @@
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/00.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/01.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/02.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/03.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/04.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/05.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/06.mp4'
+file '/Users/kariakistephen/Documents/youtube_content_automation/outputs/football_short_001/render_assets/07.mp4'

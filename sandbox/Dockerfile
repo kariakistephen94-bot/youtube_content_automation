@@ -1,6 +1,7 @@
 # tutorial-ai recording sandbox: its own virtual screen, VS Code, terminal and Chrome, so a
 # recording never takes over the Mac's keyboard, mouse or windows. Built and started by
 # `tutorial-ai sandbox build` / `tutorial-ai record <project> --sandbox` (or the web UI).
+FROM node:22-bookworm-slim AS node
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 TZ=UTC
@@ -24,6 +25,11 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
 
 # uv (same version as the host).
 COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /uvx /usr/local/bin/
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && node --version && npm --version && npx --version
 
 # tutorial-ai's Python dependencies in /opt/venv. The source itself is mounted at run time, so
 # code changes need no rebuild; only dependency changes do.
@@ -50,10 +56,12 @@ USER tutor
 # A Python for the tutorials' own `uv init`/`uv run`, so nothing is downloaded on camera, and git
 # identity for tutorials that commit.
 RUN uv python install 3.12 3.13 \
+    && uv tool install yt-dlp \
     && git config --global user.name "Tutorial" && git config --global user.email "tutorial@example.com" \
     && git config --global init.defaultBranch main
 
-ENV PYTHONPATH=/opt/tutorial-ai/src PYTHONUNBUFFERED=1 DISPLAY=:99 SHELL=/bin/bash \
+ENV PATH="/home/tutor/.local/bin:${PATH}" \
+    PYTHONPATH=/opt/tutorial-ai/src PYTHONUNBUFFERED=1 DISPLAY=:99 SHELL=/bin/bash \
     TUTORIAL_AI_SANDBOX=1 SCREEN_WIDTH=1920 SCREEN_HEIGHT=1080
 EXPOSE 6080
 ENTRYPOINT ["/usr/local/bin/tutorial-ai-sandbox"]

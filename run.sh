@@ -32,4 +32,4 @@ trap cleanup EXIT INT TERM
 
 printf 'Starting web UI on http://localhost:3100...\n'
 cd "$WEB_DIR"
-npm run dev
+TUTORIAL_AI_API_URL="http://127.0.0.1:$API_PORT" npm run dev

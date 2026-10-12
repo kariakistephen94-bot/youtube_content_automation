@@ -32,6 +32,15 @@ uv run tutorial-ai serve            # API on http://127.0.0.1:8765 (local only)
 cd web && npm install && npm run dev   # UI on http://localhost:3100
 ```
 
+Or start both processes with the included runner:
+
+```bash
+./run.sh
+```
+
+The runner installs the web dependencies when needed and stops the API when you press `Ctrl-C`.
+Set `API_PORT` to use a different local API port.
+
 The UI lets you connect GitHub, pick a repository (including private ones), run analyze → plan →
 script with a live log, read the script as a screenplay, and run the VS Code test.
 
@@ -200,9 +209,8 @@ Set in `.env` or the environment. See [.env.example](.env.example) for all optio
   measured audio lengths.
 - **Playback** (`automation/executor.py`, `automation/orchestrator.py`) performs the actions in
   the real VS Code, beat by beat, waiting for each beat's narration to finish; it records the
-  actual start time of every narration segment. A terminal command is considered finished when
-  the integrated shell has no child process left (read from the process tree), so the next command
-  is never typed while `uv add` is still installing.
+  actual start time of every narration segment. The integrated shell reports each command’s actual exit status before the next command
+  is typed. Failed commands pause the recording immediately, including missing executables.
 - **Browser** (`automation/browser.py`) shows the running app in Google Chrome and, for a
   `try_endpoint` beat, uses FastAPI's Swagger UI on camera: expands the endpoint, clicks Try it
   out, fills the fields (file uploads use a small sample file, no OS dialog), clicks Execute and
@@ -249,3 +257,16 @@ provider.
 
 - **Intel Macs:** `cryptography>=49` ships no x86_64 macOS wheels, so `pyproject.toml` constrains it
   to `<49` on that platform only.
+
+### Recording environment checks
+
+The sandbox image includes Node.js 22 with npm/npx, Python, uv, FFmpeg, git, and yt-dlp.
+After updating the Dockerfile, run `uv run tutorial-ai sandbox build` once to download and install
+the updated tools in Docker. Base tools used by a tutorial are checked before recording starts;
+project dependencies still belong to the tutorial's install commands. Missing prerequisites
+stop the run with their names instead of wasting a recording.
+
+The isolated VS Code profile uses a Bash prompt hook to report the exit status of each command
+actually typed on screen. A nonzero exit status pauses recording immediately; no completion report
+is a timeout, never success. Working-directory changes persist in that shell. Terminal focus uses
+a dedicated shortcut, without opening or typing in the command palette.

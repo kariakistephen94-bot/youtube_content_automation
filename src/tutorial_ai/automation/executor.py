@@ -35,8 +35,11 @@ class ActionExecutor:
         self.terminal = terminal
         self.browser = browser  # None: open_browser falls back to the default browser, no interaction
         self._browser_in_front = False
+        self._terminal_prepared = False
 
     def execute(self, action: Action) -> None:
+        terminal_prepared = self._terminal_prepared
+        self._terminal_prepared = False
         p = action.parameters.model_dump()
         log.info("Action %s %s %s", action.id, action.type.value, _short(p))
         stays_in_browser = action.type in BROWSER_ACTIONS or action.type is ActionType.WAIT or (
@@ -75,8 +78,9 @@ class ActionExecutor:
                 self.vscode.highlight(p["text"], p.get("line"), p.get("column"))
             case ActionType.OPEN_TERMINAL | ActionType.FOCUS_TERMINAL:
                 self.vscode.open_terminal()
+                self._terminal_prepared = True
             case ActionType.RUN_COMMAND:
-                self._run_command(p)
+                self._run_command(p, focus=not terminal_prepared)
             case ActionType.WAIT:
                 time.sleep(p["seconds"])
             case ActionType.OPEN_BROWSER:
@@ -102,25 +106,28 @@ class ActionExecutor:
 
     # --- terminal ---------------------------------------------------------------------------
 
-    def _run_command(self, p: dict) -> None:
+    def _run_command(self, p: dict, *, focus: bool = True) -> None:
         command = p["command"]
         background = bool(p.get("background"))
-        self.terminal.run_command(command, wait_seconds=0.0 if background else 1.0)
+        self.terminal.run_command(command, wait_seconds=0.0 if background else 1.0, focus=focus)
         if background:
             url = p.get("wait_url")
             if url:
                 self._wait_for_url(url, command)
             else:
                 time.sleep(4.0)
+                if self.terminal.exit_code() is not None:
+                    self.terminal.require_success()
+                    raise macos.AutomationError(f"Background command {command!r} exited instead of staying running.")
             return
-        # Wait for the command to really finish (the process tree tells, the screen does not):
-        # typing the next command while `uv add` is still installing would queue it blindly.
+        # The shell reports completion and the real exit status, even for instant failures.
         started = time.monotonic()
         if not self.terminal.wait_until_idle(COMMAND_TIMEOUT):
             raise macos.AutomationError(
                 f"{command!r} is still running after {COMMAND_TIMEOUT:.0f}s. Check the terminal in "
                 "VS Code; if the command needs that long, run it in the background instead."
             )
+        self.terminal.require_success()
         elapsed = time.monotonic() - started
         if elapsed > 3:
             log.info("%r finished after %.0fs", command, elapsed)
@@ -130,8 +137,10 @@ class ActionExecutor:
 
     def _wait_for_url(self, url: str, command: str) -> None:
         deadline = time.monotonic() + SERVER_READY_TIMEOUT
-        quiet_since: float | None = None
         while time.monotonic() < deadline:
+            if self.terminal.exit_code() is not None:
+                self.terminal.require_success()
+                raise macos.AutomationError(f"Server command {command!r} exited before answering at {url}.")
             try:
                 with urllib.request.urlopen(url, timeout=3) as response:
                     if response.status < 500:
@@ -142,16 +151,6 @@ class ActionExecutor:
                     return
             except Exception:
                 pass
-            # The server command exited (traceback, missing package, ...): don't wait it out.
-            if not self.terminal.running_commands():
-                quiet_since = quiet_since or time.monotonic()
-                if time.monotonic() - quiet_since > 4:
-                    raise macos.AutomationError(
-                        f"The server started with {command!r} exited before answering at {url}. "
-                        "Check the terminal in VS Code for the error."
-                    )
-            else:
-                quiet_since = None
             time.sleep(0.5)
         raise macos.AutomationError(
             f"The server started with {command!r} did not answer at {url} within "

@@ -58,6 +58,9 @@ def run_vscode_smoke_test(
     vscode.save_file()
     step(f"5. Opening the terminal and running {COMMAND!r}")
     terminal.run_command(COMMAND)
+    if not terminal.wait_until_idle(60):
+        raise macos.AutomationError("The VS Code test command did not finish within 60 seconds.")
+    terminal.require_success()
 
     step("6. Checking the result")
     saved = (build / "main.py").read_text(encoding="utf-8")

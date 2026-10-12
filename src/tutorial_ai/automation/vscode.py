@@ -8,6 +8,7 @@ auto-indent, suggestions accepted on Enter) - your own VS Code settings are not 
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -92,7 +93,6 @@ if IN_LINUX_SANDBOX:
     TUTORIAL_WORKSPACE_SETTINGS.update({
         "editor.fontFamily": "'JetBrains Mono', 'DejaVu Sans Mono', monospace",
         "terminal.integrated.fontFamily": "'JetBrains Mono', 'DejaVu Sans Mono', monospace",
-        "terminal.integrated.defaultProfile.linux": "bash",
         "window.titleBarStyle": "custom",
         "window.menuBarVisibility": "compact",
     })
@@ -133,13 +133,36 @@ class VSCodeController:
         self.terminal_open = False
         self._user_data_dir = profile_root / "user-data"
         self._extensions_dir = profile_root / "extensions"
+        self.terminal_status_path = profile_root / "terminal-status"
 
     def prepare_profile(self) -> None:
         settings_file = self._user_data_dir / "User" / "settings.json"
         settings_file.parent.mkdir(parents=True, exist_ok=True)
         self._extensions_dir.mkdir(parents=True, exist_ok=True)
+        self.terminal_status_path.unlink(missing_ok=True)
+        rc = self._user_data_dir.parent / "terminal.bashrc"
+        status = shlex.quote(str(self.terminal_status_path.resolve()))
+        rc.write_text(
+            "PS1='\\w $ '\nset -o pipefail\n"
+            "export CI=1 npm_config_yes=true\n"
+            "__tutorial_prompt() {\n"
+            "  local result=$?\n"
+            f"  printf '%s\\n' \"$result\" > {status}.tmp\n"
+            f"  mv {status}.tmp {status}\n"
+            "}\nPROMPT_COMMAND=__tutorial_prompt\n", encoding="utf-8")
+        platform = "linux" if IN_LINUX_SANDBOX else "osx"
+        terminal_settings = {
+            f"terminal.integrated.defaultProfile.{platform}": "Tutorial",
+            f"terminal.integrated.profiles.{platform}": {
+                "Tutorial": {"path": "/bin/bash", "args": ["--noprofile", "--rcfile", str(rc), "-i"]}
+            },
+            "terminal.integrated.shellIntegration.enabled": False,
+        }
+        (settings_file.parent / "keybindings.json").write_text(json.dumps([
+            {"key": "ctrl+alt+t", "command": "workbench.action.terminal.focus"}
+        ]) + "\n", encoding="utf-8")
         settings_file.write_text(
-            json.dumps({**PROFILE_USER_SETTINGS, **TUTORIAL_WORKSPACE_SETTINGS}, indent=2) + "\n",
+            json.dumps({**PROFILE_USER_SETTINGS, **TUTORIAL_WORKSPACE_SETTINGS, **terminal_settings}, indent=2) + "\n",
             encoding="utf-8",
         )
 
@@ -319,11 +342,11 @@ class VSCodeController:
         """Open (or focus) the integrated terminal."""
         log.info("Opening the integrated terminal")
         if self.terminal_open:
-            self.run_palette_command("Terminal: Focus Terminal")
+            self.keyboard.shortcut("ctrl+alt+t")  # direct focus, never a visibility toggle
         else:
-            self.keyboard.shortcut("ctrl+shift+`")  # always creates and focuses a terminal
-            self.terminal_open = True
-        time.sleep(1.5)  # shell startup
+            self.keyboard.shortcut("ctrl+shift+`")  # explicitly create the first terminal
+        self.terminal_open = True
+        time.sleep(0.3)
 
     def run_palette_command(self, name: str) -> None:
         self.keyboard.shortcut("cmd+shift+p")

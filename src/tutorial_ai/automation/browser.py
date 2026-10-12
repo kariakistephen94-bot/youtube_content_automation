@@ -98,7 +98,7 @@ class BrowserController:
                        lambda: self._playwright and self._playwright.stop()):
             try:
                 closer()
-            except Exception:  # already gone
+            except Exception:
                 pass
         self._page = self._context = self._playwright = None
         self.current_url = None

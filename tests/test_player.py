@@ -31,8 +31,14 @@ class FakeTerminal:
         self.idle_waits = 0
         self._busy_polls = busy_polls  # how many running_commands() calls report a running command
 
-    def run_command(self, command: str, wait_seconds: float = 0.0) -> None:
+    def run_command(self, command: str, wait_seconds: float = 0.0, *, focus: bool = True) -> None:
         self.commands.append(command)
+
+    def require_success(self) -> None:
+        pass
+
+    def exit_code(self):
+        return None
 
     def running_commands(self) -> list[str]:
         if self._busy_polls > 0:
@@ -144,3 +150,22 @@ def test_browser_actions_without_a_controller_pause_the_scene(monkeypatch):
     with pytest.raises(AutomationError, match="browser automation is not available"):
         executor.execute(Action(id="a1", type="TRY_ENDPOINT", parameters={
             "url": "http://127.0.0.1:8000/docs", "method": "get", "path": "/"}))
+
+
+def test_command_focuses_terminal_once_and_refocuses_after_editor(monkeypatch, tmp_path):
+    from tutorial_ai.automation.terminal import TerminalController
+    from tutorial_ai.models.action import Action
+
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    vscode = FakeVSCode()
+    vscode.terminal_status_path = tmp_path / "status"
+    terminal = TerminalController(vscode)
+    monkeypatch.setattr(terminal, "require_success", lambda: None)
+    monkeypatch.setattr(terminal, "wait_until_idle", lambda *args: True)
+    executor = ActionExecutor(vscode, terminal)
+    executor.execute(Action(id="focus", type="FOCUS_TERMINAL"))
+    executor.execute(Action(id="run", type="RUN_COMMAND", parameters={"command": "python3 --version"}))
+    assert sum(call[0] == "open_terminal" for call in vscode.calls) == 1
+    executor.execute(Action(id="edit", type="OPEN_FILE", parameters={"path": "main.py"}))
+    executor.execute(Action(id="run2", type="RUN_COMMAND", parameters={"command": "python3 --version"}))
+    assert sum(call[0] == "open_terminal" for call in vscode.calls) == 2
